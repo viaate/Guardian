@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Guardian neutralizer self-test</title>
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; margin: 24px; background: #f7f8fa; color: #222; }
+    h1 { font-size: 22px; }
+    #summary { font-size: 20px; font-weight: bold; padding: 12px 16px; border-radius: 8px; margin: 16px 0; }
+    .ok { background: #e6f4ea; color: #12652b; border: 2px solid #12652b; }
+    .bad { background: #fce8e6; color: #a50e0e; border: 2px solid #a50e0e; }
+    table { border-collapse: collapse; width: 100%; font-size: 14px; }
+    td, th { border: 1px solid #ccd; padding: 6px 9px; text-align: left; vertical-align: top; }
+    th { background: #eef1f6; }
+    tr.pass td:first-child { color: #12652b; font-weight: bold; }
+    tr.fail td { background: #fce8e6; }
+    tr.fail td:first-child { color: #a50e0e; font-weight: bold; }
+    #fixture { position: absolute; left: -9999px; top: 0; }
+    .note { color: #555; font-size: 14px; line-height: 1.5; max-width: 70em; }
+  </style>
+</head>
+<body>
+  <h1>Guardian download-ad neutralizer: self-test</h1>
+  <p class="note">
+    This page is the <strong>enforcement mechanism</strong> for the
+    false-positive guarantee, not documentation. It loads the real
+    <code>data/ad-networks.js</code> and <code>content/detector.js</code> and
+    asserts against them directly. No extension needed: just open the file.
+    If any row is red, the build is not shippable.
+  </p>
+
+  <div id="summary">running...</div>
+  <table id="results">
+    <tr><th style="width:70px">Result</th><th>Assertion</th><th>Detail</th></tr>
+  </table>
+
+  <!-- Off-screen DOM fixtures used by the selector and shape assertions. -->
+  <div id="fixture">
+    <div id="collisions">
+      <div class="download-button">a</div>
+      <div id="download">b</div>
+      <div class="downloads-wrap">c</div>
+      <div class="header headline thread read-more shadow gradient badge loading load-more upload breadcrumb adjacent admin">d</div>
+      <a class="download-btn" href="https://example.com/setup.exe">Download</a>
+    </div>
+    <div id="realslots">
+      <ins class="adsbygoogle"></ins>
+      <div data-label="Advertisement"><span>ad</span></div>
+      <iframe id="google_ads_iframe_test_0"></iframe>
+    </div>
+    <a id="cardlink" href="https://example.com/thing" style="display:block;width:900px;height:300px">
+      <h3>Some Program</h3>
+      <p>This is a long product blurb that goes on and on about how you can download
+         the program and what it does and why it is good, well past sixty characters
+         of text, which is exactly the shape that must never be treated as a button.</p>
+      <a href="https://example.com/inner">Read more</a>
+    </a>
+    <a id="btnlink" href="https://example.com/setup.exe" style="display:inline-block;width:180px;height:44px">Free Download</a>
+    <a id="spanlink" href="https://example.com/x.exe" style="display:inline-block;width:180px;height:44px"><span>Download</span></a>
+  </div>
+
+  <script src="../data/ad-networks.js"></script>
+  <script src="../data/allowlist.js"></script>
+  <script src="../data/typo-targets.js"></script>
+  <script src="../data/strings.js"></script>
+  <script src="../data/scam-phrases.js"></script>
+  <script src="../content/detector.js"></script>
+  <script>
+    let failures = 0;
+    const table = document.getElementById("results");
+
+    function check(name, actual, expected, detail) {
+      const pass = actual === expected;
+      if (!pass) failures++;
+      const tr = document.createElement("tr");
+      tr.className = pass ? "pass" : "fail";
+      const c1 = document.createElement("td");
+      c1.textContent = pass ? "PASS" : "FAIL";
+      const c2 = document.createElement("td");
+      c2.textContent = name;
+      const c3 = document.createElement("td");
+      c3.textContent = pass ? (detail || "") : "expected " + expected + ", got " + actual + (detail ? " - " + detail : "");
+      tr.appendChild(c1); tr.appendChild(c2); tr.appendChild(c3);
+      table.appendChild(tr);
+    }
+
+    // -----------------------------------------------------------------------
+    // 1. Download vocabulary must NOT match ordinary prose.
+    // Without the /u flag JavaScript treats an accented letter as a non-word
+    // character, so every Spanish and Portuguese page matches. This is the
+    // regression that guards it.
+    // -----------------------------------------------------------------------
+    [
+      "se descargará automáticamente",
+      "el archivo se descargará",
+      "baixará automaticamente",
+      "o arquivo será baixado automaticamente",
+      "header",
+      "uploaded",
+      "reloaded",
+      "downloadable"
+    ].forEach((s) => {
+      check("label must NOT match: " + JSON.stringify(s), guardianIsDownloadLabel(s), false);
+    });
+
+    // ...and must still match real button text, including CJK.
+    [
+      "Download", "DOWNLOAD NOW", "Free Download", "Descargar",
+      "Télécharger", "Herunterladen", "Baixar", "下载", "ダウンロード", "다운로드"
+    ].forEach((s) => {
+      check("label MUST match: " + JSON.stringify(s), guardianIsDownloadLabel(s), true);
+    });
+
+    // -----------------------------------------------------------------------
+    // 2. The ad-slot selector must not collide with download markup.
+    // "ad" is the last two letters of "downlo-ad", so a substring test would
+    // match the container of the REAL download button first.
+    // -----------------------------------------------------------------------
+    const collisions = document.getElementById("collisions");
+    check(
+      "ad-slot selector matches ZERO download/ad-lookalike class names",
+      collisions.querySelectorAll(GUARDIAN_AD_SLOT_SELECTOR).length,
+      0
+    );
+    check(
+      "ad-slot selector DOES match real publisher ad slots",
+      document.getElementById("realslots").querySelectorAll(GUARDIAN_AD_SLOT_SELECTOR).length,
+      3
+    );
+
+    // -----------------------------------------------------------------------
+    // 3. Legitimate download hosts must never be convictable, and must be
+    // positively exempt.
+    // -----------------------------------------------------------------------
+    const legitHosts = [
+      "download.documentfoundation.org", "download.mozilla.org",
+      "objects.githubusercontent.com", "github.com", "fosshub.com",
+      "gdlp01.c-wss.com", "download.ebz.epson.net", "apps.apple.com",
+      "play.google.com", "mirrors.kernel.org", "sourceforge.net",
+      "get.videolan.org", "nodejs.org", "rufus.ie"
+    ];
+    legitHosts.forEach((h) => {
+      check("NOT a decoy network: " + h, guardianHostOnList(h, GUARDIAN_DECOY_NETWORKS), false);
+    });
+    legitHosts.forEach((h) => {
+      check("exempt as a safe download host: " + h, guardianHostOnList(h, GUARDIAN_DOWNLOAD_SAFE_HOSTS), true);
+    });
+
+    // Legitimate affiliate redirectors and mainstream ad networks must never
+    // be conviction-grade: review sites route REAL vendor installers through
+    // the first group, and honest advertisers buy the second.
+    [
+      "go.skimresources.com", "anrdoezrs.net", "dpbolvw.net", "tkqlhce.com",
+      "click.linksynergy.com", "awin1.com", "shareasale.com", "impact.com",
+      "adclick.g.doubleclick.net", "securepubads.g.doubleclick.net",
+      "taboola.com", "media.net", "outbrain.com", "criteo.com",
+      "amazon-adsystem.com"
+    ].forEach((h) => {
+      check("NOT conviction-grade: " + h, guardianHostOnList(h, GUARDIAN_DECOY_NETWORKS), false);
+    });
+
+    // The decoy list must actually work on its own members.
+    ["www.adsterra.com", "x.propellerads.com", "popads.net", "a.b.monetag.com"].forEach((h) => {
+      check("IS a decoy network: " + h, guardianHostOnList(h, GUARDIAN_DECOY_NETWORKS), true);
+    });
+
+    // -----------------------------------------------------------------------
+    // 4. File types. Documents and media are out of scope IN CODE.
+    // -----------------------------------------------------------------------
+    ["a.pdf", "a.docx", "a.csv", "a.ics", "a.jpg", "a.mp3", "a.zip"].forEach((f) => {
+      check("not an installer: " + f, GUARDIAN_INSTALLER_RE.test("https://x/" + f), false);
+      check("is a document/media: " + f, GUARDIAN_DOCUMENT_RE.test("https://x/" + f), true);
+    });
+    ["a.exe", "a.msi", "a.dmg", "a.apk", "a.pkg"].forEach((f) => {
+      check("is an installer: " + f, GUARDIAN_INSTALLER_RE.test("https://x/" + f), true);
+    });
+    check("installer match survives a query string",
+      GUARDIAN_INSTALLER_RE.test("https://x/setup.exe?v=2"), true);
+
+    // -----------------------------------------------------------------------
+    // 5. Shape and label extraction.
+    // -----------------------------------------------------------------------
+    const card = document.getElementById("cardlink");
+    check("a 900x300 card-wrapping anchor fails the button shape gate",
+      guardianControlShapeOk(card), false);
+    check("a card-wrapping anchor yields no label (blurb is not a button label)",
+      guardianOwnLabel(card), "");
+    check("a real button yields its label",
+      guardianOwnLabel(document.getElementById("btnlink")), "Free Download");
+    check("a <span>-wrapped button label is still found",
+      guardianOwnLabel(document.getElementById("spanlink")), "Download");
+
+    // -----------------------------------------------------------------------
+    // 6. Click-tracker unwrapping.
+    // -----------------------------------------------------------------------
+    const un = guardianUnwrapClick(
+      "https://adclick.g.doubleclick.net/pcs/click?adurl=https%3A%2F%2Fevil.example%2Fsetup.exe"
+    );
+    check("unwrap finds the nested destination",
+      un.indexOf("https://evil.example/setup.exe") !== -1, true, un.join(" | "));
+    check("unwrap keeps the literal URL too", un.length >= 2, true);
+    check("a plain URL unwraps to exactly itself",
+      guardianUnwrapClick("https://example.com/a").length, 1);
+    check("a javascript: href unwraps to nothing",
+      guardianUnwrapClick("javascript:void(0)").length, 0);
+    check("a mailto: href unwraps to nothing",
+      guardianUnwrapClick("mailto:a@b.c").length, 0);
+
+    // -----------------------------------------------------------------------
+    // 7. ccTLD-aware registrable labels. The same-party test rests on this.
+    // -----------------------------------------------------------------------
+    check("ebay.co.uk registrable label", guardianRegistrableLabel("www.ebay.co.uk"), "ebay");
+    check("bbc.co.uk != example.co.uk",
+      guardianRegistrableLabel("bbc.co.uk") === guardianRegistrableLabel("example.co.uk"), false);
+    // gov.au lives on the SAME-PARTY suffix list, not the typosquat one.
+    // The two answer different questions: same-party matching wants a wide
+    // list, typosquat matching wants a conservative one. Widening the
+    // typosquat side made Kenya's nation.co.ke read as "nation" - one letter
+    // from the allowlisted "notion" - and warned on a national newspaper.
+    check("gov.au is a same-party suffix",
+      guardianSamePartyLabel("services.gov.au"), "services");
+    check("...and deliberately NOT one for typosquatting",
+      guardianRegistrableLabel("services.gov.au"), "gov");
+
+    // -----------------------------------------------------------------------
+    // Real brand country registrations must never read as impostors.
+    // <brand>.com.<cc> is how a brand registers in a country; getting this
+    // wrong put a full-page "STOP. This is a scam." over a real bank.
+    // -----------------------------------------------------------------------
+    ["www.amazon.com.be", "www.citibank.com.do", "walmart.com.gt",
+     "ups.com.do", "correos.com.gt", "paypal.com.mx", "ebay.com.au"]
+      .forEach(function (h) {
+        check("real country site is not an impostor: " + h,
+          guardianLookalikeHost(h), null);
+      });
+
+    // ...while attacker shapes stay caught: something after the ccTLD pair,
+    // or a throwaway TLD that exists mostly for abuse.
+    [["paypal.com.evil.net", "PayPal"], ["paypal.com.secure.tk", "PayPal"],
+     ["roblox.com.ml", "Roblox"]].forEach(function (pair) {
+      var m = guardianBrandMimic(pair[0]);
+      check("impostor still caught: " + pair[0], m && m.display, pair[1]);
+    });
+
+    // The link check behind "Is this a scam?" accepts only high-confidence
+    // look-alikes, because it runs against every link on a page.
+    [["paypa1.com", "paypal"], ["faceb00k.com", "facebook"],
+     ["wwwpaypal.com", "paypal"]].forEach(function (pair) {
+      check("look-alike link caught: " + pair[0],
+        guardianLookalikeHost(pair[0]), pair[1]);
+    });
+    ["stripes.com", "lithub.com", "fetlife.com"].forEach(function (h) {
+      check("link check ignores the weak near-miss: " + h,
+        guardianLookalikeHost(h), null);
+    });
+
+    // -----------------------------------------------------------------------
+    // 8. Path-match hosts: raw.githubusercontent.com must be path-matched,
+    // never blocked wholesale. This is the live false positive that made
+    // ~34% of the URLhaus feed take down every raw GitHub file on the web.
+    // -----------------------------------------------------------------------
+    ["raw.githubusercontent.com", "gist.githubusercontent.com",
+     "objects.githubusercontent.com", "img1.wsimg.com", "bit.ly"].forEach((h) => {
+      check("path-matched, never host-blocked: " + h,
+        guardianHostOnList(h, GUARDIAN_PATH_MATCH_HOSTS), true);
+    });
+    // Subdomain-is-the-tenant hosts must NOT be path-matched: hostname
+    // matching is already correct and more precise there.
+    ["evil.s3.amazonaws.com", "d1.cloudfront.net"].forEach((h) => {
+      check("NOT path-matched (subdomain is the tenant): " + h,
+        guardianHostOnList(h, GUARDIAN_PATH_MATCH_HOSTS), false);
+    });
+
+    const summary = document.getElementById("summary");
+    if (failures === 0) {
+      summary.className = "ok";
+      summary.textContent = "PASS - all assertions held";
+      document.title = "PASS";
+    } else {
+      summary.className = "bad";
+      summary.textContent = "FAIL (" + failures + ") - this build is not shippable";
+      document.title = "FAIL (" + failures + ")";
+    }
+  </script>
+</body>
+</html>

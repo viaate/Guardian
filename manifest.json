@@ -1,0 +1,77 @@
+{
+  "manifest_version": 3,
+  "name": "Guardian",
+  "version": "1.1.2",
+  "description": "Protects against scam websites and scam emails with clear warnings. Free, and everything runs on your own computer.",
+  "permissions": [
+    "storage",
+    "notifications",
+    "alarms",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://openphish.com/*",
+    "https://raw.githubusercontent.com/*",
+    "https://urlhaus.abuse.ch/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*",
+        "file://*/*"
+      ],
+      "exclude_matches": [
+        "*://mail.google.com/*"
+      ],
+      "js": [
+        "data/strings.js",
+        "data/allowlist.js",
+        "data/ad-networks.js",
+        "data/typo-targets.js",
+        "data/scam-phrases.js",
+        "content/detector.js",
+        "content/page-scan.js"
+      ],
+      "css": [
+        "banner/banner.css"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true,
+      "match_about_blank": true
+    },
+    {
+      "matches": [
+        "*://mail.google.com/*"
+      ],
+      "js": [
+        "data/strings.js",
+        "data/allowlist.js",
+        "data/scam-phrases.js",
+        "content/detector.js",
+        "content/gmail-scan.js"
+      ],
+      "css": [
+        "banner/banner.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

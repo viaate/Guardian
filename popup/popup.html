@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header>
+    <img src="../icons/icon48.png" alt="" width="36" height="36" />
+    <h1>Guardian</h1>
+  </header>
+
+  <div class="big-stat">
+    <div class="big-number" id="total">0</div>
+    <div class="big-label" id="label-blocked">scams blocked</div>
+  </div>
+
+  <div class="stat-row">
+    <div class="stat">
+      <div class="stat-number" id="week">0</div>
+      <div class="stat-label" id="label-week">this week</div>
+    </div>
+    <div class="stat">
+      <div class="stat-number" id="websites">0</div>
+      <div class="stat-label" id="label-websites">websites</div>
+    </div>
+    <div class="stat">
+      <div class="stat-number" id="emails">0</div>
+      <div class="stat-label" id="label-emails">emails</div>
+    </div>
+  </div>
+
+  <div class="check-wrap">
+    <button id="check-btn" class="check-circle" aria-describedby="check-hint">Is this<br />a scam?</button>
+    <div class="check-hint" id="check-hint">Not sure about the page you are on? Press the button.</div>
+  </div>
+
+  <div id="answer" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+
+  <button id="report-btn" class="report-link">Report this page as a scam</button>
+  <div id="report-done" class="report-done" hidden></div>
+
+  <div class="setting-note" id="quiet-note" style="padding-left:0" hidden></div>
+  <div class="setting-row">
+    <label class="setting">
+      <input type="checkbox" id="adshield-toggle" checked />
+      <span id="adshield-label">Switch off fake &ldquo;Download&rdquo; buttons on download sites</span>
+    </label>
+    <div class="setting-note" id="adshield-note"></div>
+  </div>
+
+  <footer id="footer-note">Everything runs on this computer. Nothing is sent anywhere.</footer>
+
+  <script src="../data/strings.js"></script>
+  <script src="../data/allowlist.js"></script>
+  <script src="../data/typo-targets.js"></script>
+  <script src="../data/scam-phrases.js"></script>
+  <script src="../content/detector.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
